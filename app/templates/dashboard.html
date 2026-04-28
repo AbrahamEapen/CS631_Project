@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Banking System{% endblock %}
+{% block content %}
+<h4 class="mb-4">Welcome back, <strong>{{ username }}</strong> 👋</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <a href="/profile" class="text-decoration-none">
+      <div class="card text-center p-3 h-100 border-primary">
+        <div class="fs-1">👤</div>
+        <div class="fw-semibold mt-1">My Profile</div>
+        <small class="text-muted">View account info</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/search" class="text-decoration-none">
+      <div class="card text-center p-3 h-100 border-success">
+        <div class="fs-1">🔍</div>
+        <div class="fw-semibold mt-1">Search Accounts</div>
+        <small class="text-muted">Find accounts by type or ID</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/transfer" class="text-decoration-none">
+      <div class="card text-center p-3 h-100 border-warning">
+        <div class="fs-1">💸</div>
+        <div class="fw-semibold mt-1">Transfer Funds</div>
+        <small class="text-muted">Send money between accounts</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center p-3 h-100 border-info" style="cursor:pointer"
+         data-bs-toggle="modal" data-bs-target="#newAccountModal">
+      <div class="fs-1">➕</div>
+      <div class="fw-semibold mt-1">New Account</div>
+      <small class="text-muted">Open a bank account</small>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm p-4">
+  <h5 class="mb-3">💳 My Accounts</h5>
+  <div id="accounts-container">
+    <div class="text-muted">Loading accounts…</div>
+  </div>
+</div>
+
+<div class="card shadow-sm p-4 mt-3" id="tx-section" style="display:none">
+  <h5 class="mb-3">📋 Transactions for Account <span id="tx-acct-label"></span></h5>
+  <div id="tx-container"></div>
+</div>
+
+<!-- Deposit/Withdraw Modal -->
+<div class="modal fade" id="txModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="txModalTitle">Transaction</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="txAccountNumber">
+        <input type="hidden" id="txType">
+        <div class="mb-3">
+          <label class="form-label">Amount ($)</label>
+          <input type="number" id="txAmount" class="form-control" min="0.01" step="0.01" placeholder="0.00">
+        </div>
+        <div id="txError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="submitTransaction()">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Account Modal -->
+<div class="modal fade" id="newAccountModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">➕ Open New Account</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">Account Type</label>
+        <select id="newAccountType" class="form-select">
+          <option value="savings">Savings</option>
+          <option value="checking">Checking</option>
+          <option value="money_market">Money Market</option>
+        </select>
+        <div id="newAccountError" class="alert alert-danger mt-3 d-none"></div>
+        <div id="newAccountSuccess" class="alert alert-success mt-3 d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-info text-white" onclick="createAccount()">Open Account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const USER_ID = {{ user_id }};
+
+async function loadAccounts() {
+  const res = await fetch(`/accounts/user/${USER_ID}`);
+  const accounts = await res.json();
+  const container = document.getElementById('accounts-container');
+  if (!accounts.length) {
+    container.innerHTML = '<p class="text-muted">No accounts found. Use the New Account button to open one.</p>';
+    return;
+  }
+  container.innerHTML = accounts.map(a => `
+    <div class="card mb-2 p-3 border-0 bg-light">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Account #${a.account_number}</strong>
+          <span class="badge bg-secondary ms-2">${a.account_type}</span>
+        </div>
+        <div class="fw-bold text-success fs-5">$${parseFloat(a.balance).toFixed(2)}</div>
+      </div>
+      <div class="mt-2 d-flex gap-2">
+        <button class="btn btn-sm btn-outline-success" onclick="openTx(${a.account_number}, 'deposit')">Deposit</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="openTx(${a.account_number}, 'withdraw')">Withdraw</button>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadTx(${a.account_number})">History</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openTx(accountNumber, type) {
+  document.getElementById('txAccountNumber').value = accountNumber;
+  document.getElementById('txType').value = type;
+  document.getElementById('txModalTitle').textContent = type === 'deposit' ? '💰 Deposit' : '💸 Withdraw';
+  document.getElementById('txAmount').value = '';
+  document.getElementById('txError').classList.add('d-none');
+  new bootstrap.Modal(document.getElementById('txModal')).show();
+}
+
+async function submitTransaction() {
+  const accountNumber = parseInt(document.getElementById('txAccountNumber').value);
+  const type = document.getElementById('txType').value;
+  const amount = parseFloat(document.getElementById('txAmount').value);
+  const errDiv = document.getElementById('txError');
+  errDiv.classList.add('d-none');
+
+  const res = await fetch(`/transactions/${type}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({account_number: accountNumber, amount})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('txModal')).hide();
+    loadAccounts();
+  } else {
+    errDiv.textContent = data.error || 'Transaction failed';
+    errDiv.classList.remove('d-none');
+  }
+}
+
+async function loadTx(accountNumber) {
+  document.getElementById('tx-section').style.display = '';
+  document.getElementById('tx-acct-label').textContent = '#' + accountNumber;
+  const res = await fetch(`/transactions/${accountNumber}`);
+  const txs = await res.json();
+  document.getElementById('tx-container').innerHTML = txs.length
+    ? txs.map(t => `
+        <div class="d-flex justify-content-between border-bottom py-2">
+          <span><span class="badge bg-${t.type === 'DEP' ? 'success' : (t.type === 'WIT' ? 'danger' : 'primary')}">${t.type}</span> &nbsp;${t.date || ''}</span>
+          <span class="fw-semibold">$${parseFloat(t.amount).toFixed(2)}</span>
+        </div>`).join('')
+    : '<p class="text-muted">No transactions yet.</p>';
+}
+
+async function createAccount() {
+  const type = document.getElementById('newAccountType').value;
+  const errDiv = document.getElementById('newAccountError');
+  const okDiv = document.getElementById('newAccountSuccess');
+  errDiv.classList.add('d-none');
+  okDiv.classList.add('d-none');
+
+  const res = await fetch('/accounts/create', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: USER_ID, account_type: type})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    okDiv.textContent = `Account #${data.account_number} (${data.account_type}) opened successfully!`;
+    okDiv.classList.remove('d-none');
+    loadAccounts();
+  } else {
+    errDiv.textContent = data.error || 'Failed to create account';
+    errDiv.classList.remove('d-none');
+  }
+}
+
+loadAccounts();
+</script>
+{% endblock %}

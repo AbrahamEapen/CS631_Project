@@ -1,0 +1,109 @@
+:root {
+  --primary: #1e88e5;
+  --success: #2e7d32;
+  --danger: #c62828;
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --text: #1f2937;
+}
+
+/* 🌍 Global */
+body {
+  background-color: var(--bg);
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--text);
+}
+
+/* 📦 Card styling */
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+/* 🧭 Dashboard layout spacing */
+.container {
+  max-width: 900px;
+}
+
+/* 🔐 Login page */
+form.card {
+  max-width: 420px;
+  margin: auto;
+  margin-top: 80px;
+  padding: 25px;
+}
+
+/* 🧾 Inputs */
+input.form-control {
+  border-radius: 8px;
+  padding: 10px;
+}
+
+/* 🔘 Buttons */
+.btn-primary {
+  background-color: var(--primary);
+  border: none;
+  border-radius: 8px;
+}
+
+.btn-primary:hover {
+  background-color: #1565c0;
+}
+
+/* 🟢 Success / Deposit */
+.btn-success {
+  background-color: var(--success);
+  border: none;
+  border-radius: 8px;
+}
+
+.btn-success:hover {
+  background-color: #1b5e20;
+}
+
+/* 🔴 Danger / Withdraw */
+.btn-danger {
+  background-color: var(--danger);
+  border: none;
+  border-radius: 8px;
+}
+
+.btn-danger:hover {
+  background-color: #8e0000;
+}
+
+/* 🏦 Account cards */
+#accounts .card {
+  margin-bottom: 15px;
+  padding: 15px;
+  transition: transform 0.15s ease-in-out;
+}
+
+#accounts .card:hover {
+  transform: translateY(-2px);
+}
+
+/* 💳 Transaction list */
+#transactions .border {
+  border-radius: 8px;
+  background: white;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+/* 🏷️ Headings */
+h2, h3, h4 {
+  font-weight: 600;
+}
+
+/* 📱 Mobile responsiveness */
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  form.card {
+    margin-top: 40px;
+  }
+}

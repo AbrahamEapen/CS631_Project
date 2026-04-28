@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Search Accounts – Banking System{% endblock %}
+{% block content %}
+<h4 class="mb-4">🔍 Search Accounts</h4>
+
+<div class="card shadow-sm p-4 mb-4">
+  <form method="GET" action="/search" class="row g-3">
+    <div class="col-md-5">
+      <label class="form-label">Search by Account # or Customer Name</label>
+      <input type="text" name="q" class="form-control" placeholder="e.g. 1001 or John Doe" value="{{ query }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Account Type</label>
+      <select name="type" class="form-select">
+        <option value="">All Types</option>
+        <option value="savings">Savings</option>
+        <option value="checking">Checking</option>
+        <option value="money_market">Money Market</option>
+        <option value="loan">Loan</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button type="submit" class="btn btn-primary w-100">Search</button>
+    </div>
+  </form>
+</div>
+
+<div id="results-section">
+  {% if query %}
+    <div class="text-muted">Searching for "<strong>{{ query }}</strong>"…</div>
+  {% else %}
+    <p class="text-muted">Enter a search term above to find accounts.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const q = "{{ query | e }}";
+const type = new URLSearchParams(window.location.search).get('type') || '';
+
+if (q || type) {
+  const url = `/accounts/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}`;
+  fetch(url).then(r => r.json()).then(accounts => {
+    const section = document.getElementById('results-section');
+    if (!accounts.length) {
+      section.innerHTML = '<p class="text-muted">No accounts found matching your search.</p>';
+      return;
+    }
+    section.innerHTML = `
+      <p class="text-muted mb-2">Found <strong>${accounts.length}</strong> result(s)</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr><th>Account #</th><th>Type</th><th>Balance</th></tr>
+          </thead>
+          <tbody>
+            ${accounts.map(a => `
+              <tr>
+                <td><strong>#${a.account_number}</strong></td>
+                <td><span class="badge bg-secondary">${a.account_type}</span></td>
+                <td class="text-success fw-bold">$${parseFloat(a.balance).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  });
+}
+</script>
+{% endblock %}

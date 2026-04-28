@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard – Banking System{% endblock %}
+{% block content %}
+<h4 class="mb-4">🛠️ Admin Dashboard</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card text-center p-3 border-primary">
+      <div class="fs-1 fw-bold text-primary" id="stat-users">—</div>
+      <div class="text-muted">Total Users</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center p-3 border-success">
+      <div class="fs-1 fw-bold text-success" id="stat-accounts">—</div>
+      <div class="text-muted">Total Accounts</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center p-3 border-warning">
+      <div class="fs-1 fw-bold text-warning" id="stat-transactions">—</div>
+      <div class="text-muted">Total Transactions</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <a href="/admin/users" class="text-decoration-none">
+      <div class="card p-4 h-100">
+        <h5>👥 Manage Users</h5>
+        <p class="text-muted mb-0">View all registered users in the system.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6">
+    <a href="/admin/transactions" class="text-decoration-none">
+      <div class="card p-4 h-100">
+        <h5>📋 All Transactions</h5>
+        <p class="text-muted mb-0">Browse every reservation and transaction.</p>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+fetch('/admin/api/stats')
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(d => {
+    document.getElementById('stat-users').textContent = d.total_users ?? '—';
+    document.getElementById('stat-accounts').textContent = d.total_accounts ?? '—';
+    document.getElementById('stat-transactions').textContent = d.total_transactions ?? '—';
+  })
+  .catch(() => {});
+</script>
+{% endblock %}

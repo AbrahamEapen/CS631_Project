@@ -1,0 +1,61 @@
+name: CI Pipeline
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 3. Upgrade pip
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      # 4. Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      # 5. Ensure imports resolve correctly
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=." >> $GITHUB_ENV
+
+      # 6. Run tests
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          JWT_SECRET_KEY: test-secret
+          FLASK_ENV: testing
+        run: pytest -v --disable-warnings --maxfail=1
+
+      # 7. Optional coverage report
+      - name: Run coverage
+        run: pytest --cov=app --cov-report=term-missing
