@@ -34,5 +34,20 @@ services:
       JWT_SECRET:   cs631-jwt-secret
       SECRET_KEY:   cs631-flask-secret
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: bank_pgadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL:    admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   postgres_data:
+  pgadmin_data:

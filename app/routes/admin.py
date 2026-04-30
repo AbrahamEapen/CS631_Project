@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, session, render_template, redirect, url_for, flash
-from app.models.updated_models import User, BankTransaction, Account
+from app.models.updated_models import User, BankTransaction, Account, Customer, LoanAccount, CustomerAccount
+from app.extensions import db
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -73,3 +74,47 @@ def all_transactions():
         }
         for t in BankTransaction.query.order_by(BankTransaction.transaction_date.desc()).all()
     ]), 200
+
+@admin_bp.route("/api/users/<int:user_id>", methods=["DELETE"])
+def delete_user(user_id):
+    if not _is_admin():
+        return jsonify({"error": "Forbidden"}), 403
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    customer = user.customer
+
+    if customer:
+        linked_account_numbers = [
+            link.account_number for link in customer.account_links
+        ]
+        if linked_account_numbers:
+            loan = (
+                LoanAccount.query
+                .filter(LoanAccount.account_number.in_(linked_account_numbers))
+                .first()
+            )
+            if loan:
+                return jsonify({
+                    "error": (
+                        f"Cannot delete customer '{customer.name}'. "
+                        f"They have an active loan account "
+                        f"(account #{loan.account_number}). "
+                        "Close all loan accounts first."
+                    )
+                }), 409
+
+    try:
+        if customer:
+            db.session.delete(customer)
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({"message": "User deleted successfully"}), 200
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Deletion failed: {str(e)}"}), 500

@@ -12,7 +12,7 @@
     <div class="table-responsive d-none" id="users-table-wrap">
       <table class="table table-hover mb-0">
         <thead class="table-dark">
-          <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Registered</th></tr>
+          <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Registered</th><th>Action</th></tr>
         </thead>
         <tbody id="users-tbody"></tbody>
       </table>
@@ -34,7 +34,7 @@ fetch('/admin/api/users')
     document.getElementById('users-table-wrap').classList.remove('d-none');
     const tbody = document.getElementById('users-tbody');
     if (!users.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No users found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No users found.</td></tr>';
       return;
     }
     tbody.innerHTML = users.map(u => `
@@ -44,6 +44,9 @@ fetch('/admin/api/users')
         <td>${u.email || '—'}</td>
         <td><span class="badge bg-${u.role === 'admin' ? 'danger' : 'primary'}">${u.role}</span></td>
         <td>${u.created_at ? u.created_at.split('T')[0] : '—'}</td>
+        <td>
+          ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">Delete</button>` : '—'}
+        </td>
       </tr>`).join('');
   })
   .catch(err => {
@@ -52,5 +55,20 @@ fetch('/admin/api/users')
     el.textContent = 'Failed to load users: ' + err.message;
     el.classList.remove('d-none');
   });
+
+function deleteUser(userId, username) {
+  if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+  fetch(`/admin/api/users/${userId}`, { method: 'DELETE' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (ok) {
+        alert('User deleted successfully.');
+        location.reload();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    })
+    .catch(err => alert('Request failed: ' + err.message));
+}
 </script>
 {% endblock %}

@@ -1,4 +1,6 @@
 from datetime import datetime
+from sqlalchemy import event
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 
 
@@ -189,3 +191,26 @@ class BankTransaction(db.Model):
 
     transaction_type = db.relationship("TransactionType", back_populates="transactions")
     account = db.relationship("Account", back_populates="transactions")
+
+
+# =========================
+# LOAN GUARD — prevent deleting a customer who has active loan accounts
+# =========================
+@event.listens_for(Customer, "before_delete")
+def block_customer_delete_if_loan_exists(mapper, connection, target):
+    linked_account_numbers = [
+        link.account_number for link in target.account_links
+    ]
+    if linked_account_numbers:
+        loan_exists = (
+            db.session.query(LoanAccount)
+            .filter(LoanAccount.account_number.in_(linked_account_numbers))
+            .first()
+        )
+        if loan_exists:
+            raise ValueError(
+                f"Cannot delete customer '{target.name}' (SSN: {target.ssn}) "
+                f"because they have an active loan account "
+                f"(account #{loan_exists.account_number}). "
+                "Please close all loan accounts before removing this customer."
+            )

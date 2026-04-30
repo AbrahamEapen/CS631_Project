@@ -115,3 +115,26 @@ CREATE TABLE customer_banks_at (
     FOREIGN KEY (customer_ssn) REFERENCES customers(customer_ssn),
     FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
 );
+
+-- Function that checks for loan accounts before deleting a customer
+CREATE OR REPLACE FUNCTION check_customer_loan_before_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM customer_account ca
+        JOIN loan_account la ON ca.account_number = la.account_number
+        WHERE ca.customer_ssn = OLD.ssn
+    ) THEN
+        RAISE EXCEPTION 'Cannot delete customer % (%) because they have an active loan account. Close all loan accounts first.',
+            OLD.name, OLD.ssn;
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach the trigger to the customer table
+CREATE TRIGGER prevent_customer_delete_with_loan
+BEFORE DELETE ON customer
+FOR EACH ROW
+EXECUTE FUNCTION check_customer_loan_before_delete();
