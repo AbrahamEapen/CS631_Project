@@ -126,14 +126,16 @@ BEGIN
         JOIN loan_account la ON ca.account_number = la.account_number
         WHERE ca.customer_ssn = OLD.ssn
     ) THEN
-        RAISE EXCEPTION 'Cannot delete customer % (%) because they have an active loan account. Close all loan accounts first.',
+        RAISE EXCEPTION
+            'Cannot delete customer % (%) because they have an active loan account. Close all loan accounts first.',
             OLD.name, OLD.ssn;
     END IF;
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
--- Attach the trigger to the customer table
+DROP TRIGGER IF EXISTS prevent_customer_delete_with_loan ON customer;
+
 CREATE TRIGGER prevent_customer_delete_with_loan
 BEFORE DELETE ON customer
 FOR EACH ROW

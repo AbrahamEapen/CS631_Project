@@ -24,16 +24,35 @@ if __name__ == "__main__":
 
     with app.app_context():
         db.create_all()
-
-        # Auto-seed only for local SQLite on first run
-        if using_sqlite:
-            db_path = os.path.join(os.path.dirname(__file__), "banking.db")
-            from app.models.updated_models import User
-            if not User.query.first():
-                print("Empty database detected — seeding sample data…")
-                from seed import run_seed
-                run_seed()
-
+        from sqlalchemy import text
+        db.session.execute(text("""
+            CREATE OR REPLACE FUNCTION check_customer_loan_before_delete()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM customer_account ca
+                    JOIN loan_account la ON ca.account_number = la.account_number
+                    WHERE ca.customer_ssn = OLD.ssn
+                ) THEN
+                    RAISE EXCEPTION
+                        'Cannot delete customer % (%) because they have an active loan account. Close all loan accounts first.',
+                        OLD.name, OLD.ssn;
+                END IF;
+                RETURN OLD;
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        db.session.execute(text("""
+            DROP TRIGGER IF EXISTS prevent_customer_delete_with_loan ON customer;
+        """))
+        db.session.execute(text("""
+            CREATE TRIGGER prevent_customer_delete_with_loan
+            BEFORE DELETE ON customer
+            FOR EACH ROW
+            EXECUTE FUNCTION check_customer_loan_before_delete();
+        """))
+        db.session.commit()
     print("\n🏦  CS631 Banking System")
     print(f"    DB  : {app.config['SQLALCHEMY_DATABASE_URI']}")
     print("    URL : http://localhost:5000\n")

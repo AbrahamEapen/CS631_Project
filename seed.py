@@ -62,6 +62,35 @@ def run_seed():
         cur.close()
         raw.close()
         db.create_all()
+        from sqlalchemy import text
+        db.session.execute(text("""
+            CREATE OR REPLACE FUNCTION check_customer_loan_before_delete()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM customer_account ca
+                    JOIN loan_account la ON ca.account_number = la.account_number
+                    WHERE ca.customer_ssn = OLD.ssn
+                ) THEN
+                    RAISE EXCEPTION
+                        'Cannot delete customer % (%) because they have an active loan account. Close all loan accounts first.',
+                        OLD.name, OLD.ssn;
+                END IF;
+                RETURN OLD;
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        db.session.execute(text("""
+            DROP TRIGGER IF EXISTS prevent_customer_delete_with_loan ON customer;
+        """))
+        db.session.execute(text("""
+            CREATE TRIGGER prevent_customer_delete_with_loan
+            BEFORE DELETE ON customer
+            FOR EACH ROW
+            EXECUTE FUNCTION check_customer_loan_before_delete();
+        """))
+        db.session.commit()
         # ── TRANSACTION TYPES ──────────────────────────────────────────────
         tx_types = [
             TransactionType(code="DEP", name="Deposit",    is_chargeable=False),
