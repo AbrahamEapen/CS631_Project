@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import date
 from app.extensions import db
-from app.models.updated_models import Account, BankTransaction, CustomerAccount, TransactionType
+from app.models.updated_models import Account, Transaction, CustomerAccount, TransactionType
 
 transactions_bp = Blueprint("transactions", __name__)
 
@@ -27,12 +27,12 @@ def deposit_route():
     _ensure_transaction_types()
     account.balance = float(account.balance) + amount
 
-    tx = BankTransaction(
+    tx = Transaction(
         code="DEP",
         account_number=account_number,
         amount=amount,
-        transaction_date=date.today(),
-        transaction_hour=0
+        date=date.today(),
+        hour=0
     )
     db.session.add(tx)
     db.session.commit()
@@ -54,12 +54,12 @@ def withdraw_route():
     _ensure_transaction_types()
     account.balance = float(account.balance) - amount
 
-    tx = BankTransaction(
+    tx = Transaction(
         code="WIT",
         account_number=account_number,
         amount=amount,
-        transaction_date=date.today(),
-        transaction_hour=0
+        date=date.today(),
+        hour=0
     )
     db.session.add(tx)
     db.session.commit()
@@ -87,10 +87,10 @@ def transfer_route():
     from_account.balance = float(from_account.balance) - amount
     to_account.balance = float(to_account.balance) + amount
 
-    tx_out = BankTransaction(code="TRF", account_number=from_account_number, amount=amount,
-                             transaction_date=date.today(), transaction_hour=0)
-    tx_in = BankTransaction(code="TRF", account_number=to_account_number, amount=amount,
-                            transaction_date=date.today(), transaction_hour=0)
+    tx_out = Transaction(code="TRF", account_number=from_account_number,
+                         amount=amount, date=date.today(), hour=0)
+    tx_in  = Transaction(code="TRF", account_number=to_account_number,
+                         amount=amount, date=date.today(), hour=0)
     db.session.add_all([tx_out, tx_in])
     db.session.commit()
     return jsonify({
@@ -102,13 +102,13 @@ def transfer_route():
 
 @transactions_bp.route("/<int:account_number>", methods=["GET"])
 def list_transactions(account_number):
-    txs = BankTransaction.query.filter_by(account_number=account_number).order_by(
-        BankTransaction.transaction_date.desc()).all()
+    txs = Transaction.query.filter_by(account_number=account_number).order_by(
+        Transaction.date.desc()).all()
     return jsonify([
         {
             "id": t.transaction_id,
             "amount": float(t.amount),
             "type": t.code,
-            "date": t.transaction_date.isoformat() if t.transaction_date else None
+            "date": t.date.isoformat() if t.date else None
         } for t in txs
     ]), 200

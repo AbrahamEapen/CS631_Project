@@ -18,14 +18,15 @@ from datetime import datetime, timedelta, date
 from faker import Faker
 from werkzeug.security import generate_password_hash
 import psycopg2
+
 def _hash(pw):
     return generate_password_hash(pw, method="pbkdf2:sha256", salt_length=8)
 
 from app import create_app
 from app.extensions import db
 from app.models.updated_models import (
-    User, Customer, Account, BankTransaction, Branch, Employee,
-    TransactionType, CustomerAccount, EmployeeDependent,
+    User, Customer, Account, Transaction, Branch, Employee,
+    TransactionType, CustomerAccount, EmployeeDependent, EmployeePhone,
     SavingsAccount, CheckingAccount, MoneyMarketAccount, LoanAccount,
 )
 
@@ -35,9 +36,9 @@ Faker.seed(42)
 
 app = create_app()
 
-NUM_BRANCHES    = 3
-NUM_EMPLOYEES   = 8
-NUM_EXTRA_USERS = 9   # additional random users (seed user is +1, admin is +1)
+NUM_BRANCHES     = 3
+NUM_EMPLOYEES    = 8
+NUM_EXTRA_USERS  = 9
 NUM_TRANSACTIONS = 60
 
 
@@ -48,7 +49,6 @@ def _random_date(days_back=365):
 def run_seed():
     with app.app_context():
         print("Dropping and recreating all tables…")
-# NEW
         import psycopg2
         db.engine.dispose()
         url = db.engine.url.render_as_string(hide_password=False)
@@ -62,6 +62,7 @@ def run_seed():
         cur.close()
         raw.close()
         db.create_all()
+
         from sqlalchemy import text
         db.session.execute(text("""
             CREATE OR REPLACE FUNCTION check_customer_loan_before_delete()
@@ -91,6 +92,7 @@ def run_seed():
             EXECUTE FUNCTION check_customer_loan_before_delete();
         """))
         db.session.commit()
+
         # ── TRANSACTION TYPES ──────────────────────────────────────────────
         tx_types = [
             TransactionType(code="DEP", name="Deposit",    is_chargeable=False),
@@ -118,17 +120,16 @@ def run_seed():
         # ── EMPLOYEES ─────────────────────────────────────────────────────
         employees = []
 
-        # Head manager
         head_mgr = Employee(
             ssn="100-00-0001",
             name="Patricia Reynolds",
-            phone_number="212-555-0100",
             start_date=date(2015, 3, 1),
             branch_id=branches[0].branch_id,
             manager_ssn=None,
         )
         db.session.add(head_mgr)
         db.session.flush()
+        db.session.add(EmployeePhone(ssn=head_mgr.ssn, phone="212-555-0100"))
         employees.append(head_mgr)
 
         for i in range(NUM_EMPLOYEES - 1):
@@ -136,12 +137,13 @@ def run_seed():
             emp = Employee(
                 ssn=ssn,
                 name=fake.name(),
-                phone_number=fake.phone_number()[:20],
                 start_date=_random_date(days_back=3000),
                 branch_id=random.choice(branches).branch_id,
                 manager_ssn=head_mgr.ssn,
             )
             db.session.add(emp)
+            db.session.flush()
+            db.session.add(EmployeePhone(ssn=emp.ssn, phone=fake.phone_number()[:20]))
             employees.append(emp)
 
         db.session.commit()
@@ -156,7 +158,10 @@ def run_seed():
         # ── EMPLOYEE DEPENDENTS ────────────────────────────────────────────
         for emp in employees:
             for _ in range(random.randint(0, 2)):
-                db.session.add(EmployeeDependent(emp_ssn=emp.ssn, dependent_name=fake.name()))
+                db.session.add(EmployeeDependent(
+                    employee_ssn=emp.ssn,
+                    dependent_name=fake.name()
+                ))
         db.session.commit()
         print("  ✓ Employee dependents")
 
@@ -169,19 +174,27 @@ def run_seed():
             db.session.flush()
 
             if acc_type == "savings":
-                db.session.add(SavingsAccount(account_number=acc.account_number,
-                                              interest_rate=round(random.uniform(0.01, 0.05), 4)))
+                db.session.add(SavingsAccount(
+                    account_number=acc.account_number,
+                    interest_rate=round(random.uniform(0.01, 0.05), 4)
+                ))
             elif acc_type == "checking":
-                db.session.add(CheckingAccount(account_number=acc.account_number,
-                                               overdraft_amount=round(random.uniform(0, 500), 2)))
+                db.session.add(CheckingAccount(
+                    account_number=acc.account_number,
+                    overdraft_amount=round(random.uniform(0, 500), 2)
+                ))
             elif acc_type == "money_market":
-                db.session.add(MoneyMarketAccount(account_number=acc.account_number,
-                                                  variable_interest_rate=round(random.uniform(0.01, 0.07), 4)))
+                db.session.add(MoneyMarketAccount(
+                    account_number=acc.account_number,
+                    variable_interest_rate=round(random.uniform(0.01, 0.07), 4)
+                ))
             elif acc_type == "loan":
-                db.session.add(LoanAccount(account_number=acc.account_number,
-                                           interest_rate=round(random.uniform(0.03, 0.12), 4),
-                                           monthly_payment=round(random.uniform(100, 1200), 2),
-                                           branch_id=random.choice(branches).branch_id))
+                db.session.add(LoanAccount(
+                    account_number=acc.account_number,
+                    fixed_interest_rate=round(random.uniform(0.03, 0.12), 4),
+                    monthly_payment=round(random.uniform(100, 1200), 2),
+                    branch_id=random.choice(branches).branch_id
+                ))
             return acc
 
         all_accounts = []
@@ -206,12 +219,11 @@ def run_seed():
             zip_code="10001",
             branch_id=branches[0].branch_id,
             personal_banker_ssn=employees[1].ssn,
-            user_id=seed_user.id,
         )
         db.session.add(seed_customer)
         db.session.flush()
 
-        # Give seed user three accounts: savings, checking, and a money market
+        # Give seed user three accounts: savings, checking, money market
         seed_accounts = []
         for acc_type, balance in [("savings", 4250.00), ("checking", 1875.50), ("money_market", 9100.00)]:
             acc = Account(balance=balance, account_type=acc_type)
@@ -229,13 +241,30 @@ def run_seed():
             db.session.add(CustomerAccount(
                 customer_ssn=seed_customer.ssn,
                 account_number=acc.account_number,
-                last_accessed_date=date.today() - timedelta(days=1),
+                last_access_date=date.today() - timedelta(days=1),
             ))
             seed_accounts.append(acc)
             all_accounts.append(acc)
 
+        # Give seed user a loan account
+        seed_loan_acc = Account(balance=15000.00, account_type="loan")
+        db.session.add(seed_loan_acc)
+        db.session.flush()
+        db.session.add(LoanAccount(
+            account_number=seed_loan_acc.account_number,
+            fixed_interest_rate=0.0650,
+            monthly_payment=450.00,
+            branch_id=branches[0].branch_id,
+        ))
+        db.session.add(CustomerAccount(
+            customer_ssn=seed_customer.ssn,
+            account_number=seed_loan_acc.account_number,
+            last_access_date=date.today(),
+        ))
+        all_accounts.append(seed_loan_acc)
+
         db.session.commit()
-        print(f"  ✓ Seed user: john.doe@example.com / password123  (3 accounts)")
+        print(f"  ✓ Seed user: john.doe@example.com / password123  (3 accounts + 1 loan)")
 
         # ── RANDOM USERS + CUSTOMERS + ACCOUNTS ───────────────────────────
         for i in range(NUM_EXTRA_USERS):
@@ -260,18 +289,16 @@ def run_seed():
                 zip_code=fake.zipcode(),
                 branch_id=random.choice(branches).branch_id,
                 personal_banker_ssn=random.choice(employees).ssn,
-                user_id=user.id,
             )
             db.session.add(customer)
             db.session.flush()
 
-            # 1 or 2 accounts per random user
             for _ in range(random.randint(1, 2)):
                 acc = make_account()
                 db.session.add(CustomerAccount(
                     customer_ssn=customer.ssn,
                     account_number=acc.account_number,
-                    last_accessed_date=_random_date(days_back=60),
+                    last_access_date=_random_date(days_back=60),
                 ))
                 all_accounts.append(acc)
 
@@ -289,8 +316,7 @@ def run_seed():
         db.session.commit()
         print("  ✓ Admin user: admin@bank.com / admin123")
 
-        # ── TRANSACTIONS ─────────────────────────────────────────────────
-        # Rich history for seed user accounts
+        # ── TRANSACTIONS ──────────────────────────────────────────────────
         seed_tx_history = [
             ("DEP", seed_accounts[0], 1200.00, 45),
             ("DEP", seed_accounts[0],  500.00, 30),
@@ -306,23 +332,22 @@ def run_seed():
             ("WIT", seed_accounts[2],  200.00, 14),
         ]
         for code, acc, amount, days_ago in seed_tx_history:
-            db.session.add(BankTransaction(
+            db.session.add(Transaction(
                 code=code,
                 account_number=acc.account_number,
-                transaction_date=date.today() - timedelta(days=days_ago),
-                transaction_hour=random.randint(8, 17),
+                date=date.today() - timedelta(days=days_ago),
+                hour=random.randint(8, 17),
                 amount=amount,
             ))
 
-        # Random transactions for all accounts
         for _ in range(NUM_TRANSACTIONS):
             acc = random.choice(all_accounts)
             code = random.choice(["DEP", "WIT", "TRF"])
-            db.session.add(BankTransaction(
+            db.session.add(Transaction(
                 code=code,
                 account_number=acc.account_number,
-                transaction_date=_random_date(days_back=180),
-                transaction_hour=random.randint(0, 23),
+                date=_random_date(days_back=180),
+                hour=random.randint(0, 23),
                 amount=round(random.uniform(10, 2000), 2),
             ))
 

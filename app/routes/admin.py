@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, session, render_template, redirect, url_for, flash
-from app.models.updated_models import User, BankTransaction, Account, Customer, LoanAccount, CustomerAccount
+from app.models.updated_models import User, Transaction, Account, Customer, LoanAccount, CustomerAccount
 from app.extensions import db
 
 admin_bp = Blueprint("admin", __name__)
@@ -41,7 +41,7 @@ def stats():
         return jsonify({"error": "Forbidden"}), 403
     return jsonify({
         "total_users": User.query.count(),
-        "total_transactions": BankTransaction.query.count(),
+        "total_transactions": Transaction.query.count(),
         "total_accounts": Account.query.count(),
     }), 200
 
@@ -70,9 +70,9 @@ def all_transactions():
             "account_number": t.account_number,
             "amount": float(t.amount),
             "type": t.code,
-            "date": t.transaction_date.isoformat() if t.transaction_date else None,
+            "date": t.date.isoformat() if t.date else None,
         }
-        for t in BankTransaction.query.order_by(BankTransaction.transaction_date.desc()).all()
+        for t in Transaction.query.order_by(Transaction.date.desc()).all()
     ]), 200
 
 @admin_bp.route("/api/users/<int:user_id>", methods=["DELETE"])
@@ -84,31 +84,7 @@ def delete_user(user_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    customer = user.customer
-
-    if customer:
-        linked_account_numbers = [
-            link.account_number for link in customer.account_links
-        ]
-        if linked_account_numbers:
-            loan = (
-                LoanAccount.query
-                .filter(LoanAccount.account_number.in_(linked_account_numbers))
-                .first()
-            )
-            if loan:
-                return jsonify({
-                    "error": (
-                        f"Cannot delete customer '{customer.name}'. "
-                        f"They have an active loan account "
-                        f"(account #{loan.account_number}). "
-                        "Close all loan accounts first."
-                    )
-                }), 409
-
     try:
-        if customer:
-            db.session.delete(customer)
         db.session.delete(user)
         db.session.commit()
         return jsonify({"message": "User deleted successfully"}), 200

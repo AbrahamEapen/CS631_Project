@@ -1,12 +1,13 @@
 from app.extensions import db
 from app.models.updated_models import (
-    User, Customer, Account, BankTransaction, Branch, Employee,
+    User, Customer, Account, Transaction, Branch, Employee,
     CustomerAccount, TransactionType, SavingsAccount, CheckingAccount,
-    MoneyMarketAccount, LoanAccount, EmployeeDependent
+    MoneyMarketAccount, LoanAccount, EmployeeDependent, EmployeePhone
 )
 
 __all__ = [
-    "db", "User", "Customer", "Account", "BankTransaction", "Branch",
+    "db", "User", "Customer", "Account", "Transaction", "Branch",
     "Employee", "CustomerAccount", "TransactionType", "SavingsAccount",
-    "CheckingAccount", "MoneyMarketAccount", "LoanAccount", "EmployeeDependent"
+    "CheckingAccount", "MoneyMarketAccount", "LoanAccount", "EmployeeDependent",
+    "EmployeePhone"
 ]

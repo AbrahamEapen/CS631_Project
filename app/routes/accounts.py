@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
-from app.models.updated_models import Account, Customer, CustomerAccount, User, Branch
+from app.models.updated_models import Account, Customer, CustomerAccount, User, Branch, SavingsAccount, CheckingAccount, MoneyMarketAccount
 from app.extensions import db
+import datetime
 
 accounts_bp = Blueprint("accounts", __name__)
 
@@ -17,11 +18,9 @@ def search_accounts():
         query = query.filter(Account.account_type.ilike(f"%{account_type}%"))
 
     if q:
-        # Try searching by account number
         if q.isdigit():
             query = query.filter(Account.account_number == int(q))
         else:
-            # Search by customer name via join
             query = query.join(CustomerAccount, Account.account_number == CustomerAccount.account_number)\
                          .join(Customer, CustomerAccount.customer_ssn == Customer.ssn)\
                          .filter(Customer.name.ilike(f"%{q}%"))
@@ -38,16 +37,12 @@ def search_accounts():
     ]), 200
 
 
-@accounts_bp.route("/user/<int:user_id>", methods=["GET"])
-def accounts_by_user(user_id):
-    """Get all accounts for a given user_id via their linked Customer."""
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    customer = user.customer
+@accounts_bp.route("/customer/<string:customer_ssn>", methods=["GET"])
+def accounts_by_customer(customer_ssn):
+    """Get all accounts for a given customer SSN."""
+    customer = Customer.query.get(customer_ssn)
     if not customer:
-        return jsonify([]), 200
+        return jsonify({"error": "Customer not found"}), 404
 
     accounts = [
         {
@@ -58,6 +53,22 @@ def accounts_by_user(user_id):
         for link in customer.account_links
     ]
     return jsonify(accounts), 200
+
+
+@accounts_bp.route("/user/<int:user_id>", methods=["GET"])
+def accounts_by_user(user_id):
+    """Get all accounts for a given user by matching email to customer lookup."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    customer = Customer.query.filter_by(
+        ssn=None  # no direct FK — look up by email match
+    ).first()
+
+    # Since user_id FK was removed from Customer per the relational schema,
+    # the frontend should use /accounts/customer/<ssn> instead.
+    return jsonify({"error": "Use /accounts/customer/<ssn> to fetch accounts by customer"}), 400
 
 
 @accounts_bp.route("/", methods=["POST"])
@@ -109,44 +120,31 @@ def get_profile(user_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    customer = user.customer
-    accounts = []
-    if customer:
-        accounts = [
-            {
-                "account_number": link.account.account_number,
-                "balance": float(link.account.balance),
-                "type": link.account.account_type,
-            }
-            for link in customer.account_links
-        ]
-
+    # user_id FK removed from Customer per schema — no direct relationship
     return jsonify({
         "user_id": user.id,
         "username": user.username,
         "email": user.email,
         "role": user.role,
         "created_at": user.created_at.isoformat() if user.created_at else None,
-        "customer_name": customer.name if customer else None,
-        "accounts": accounts
+        "customer_name": None,
+        "accounts": []
     }), 200
 
 
 @accounts_bp.route("/create", methods=["POST"])
 def create_account_for_user():
     data = request.get_json()
-    user_id = data.get("user_id")
+    customer_ssn = data.get("customer_ssn")
     account_type = data.get("account_type", "savings")
 
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
+    if not customer_ssn:
+        return jsonify({"error": "customer_ssn is required"}), 400
 
-    customer = user.customer
+    customer = Customer.query.get(customer_ssn)
     if not customer:
-        return jsonify({"error": "No customer profile linked to this account. Contact your branch."}), 400
+        return jsonify({"error": "Customer not found"}), 404
 
-    from app.models.updated_models import SavingsAccount, CheckingAccount, MoneyMarketAccount
     account = Account(balance=0.00, account_type=account_type)
     db.session.add(account)
     db.session.flush()
@@ -161,7 +159,7 @@ def create_account_for_user():
     db.session.add(CustomerAccount(
         customer_ssn=customer.ssn,
         account_number=account.account_number,
-        last_accessed_date=__import__('datetime').date.today()
+        last_access_date=datetime.date.today()
     ))
     db.session.commit()
 

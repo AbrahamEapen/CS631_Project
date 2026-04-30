@@ -17,8 +17,6 @@ class User(db.Model):
     role = db.Column(db.String(20), default="customer")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    customer = db.relationship("Customer", back_populates="user", uselist=False)
-
 
 # =========================
 # BRANCH
@@ -27,7 +25,7 @@ class Branch(db.Model):
     __tablename__ = "branch"
 
     branch_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False, unique=True)
     city = db.Column(db.String(50), nullable=False)
     address = db.Column(db.String(200), nullable=False)
     assets = db.Column(db.Numeric, nullable=False)
@@ -51,7 +49,6 @@ class Employee(db.Model):
 
     ssn = db.Column(db.String(11), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    phone_number = db.Column(db.String(20), nullable=True)
     start_date = db.Column(db.Date, nullable=False)
 
     branch_id = db.Column(db.Integer, db.ForeignKey("branch.branch_id"), nullable=False)
@@ -59,8 +56,21 @@ class Employee(db.Model):
 
     branch = db.relationship("Branch", back_populates="employees", foreign_keys=[branch_id])
     manager = db.relationship("Employee", remote_side=[ssn])
+    phones = db.relationship("EmployeePhone", back_populates="employee", cascade="all, delete")
     dependents = db.relationship("EmployeeDependent", back_populates="employee", cascade="all, delete")
     customers = db.relationship("Customer", back_populates="personal_banker")
+
+
+# =========================
+# EMPLOYEE_PHONE (Multi-valued attribute)
+# =========================
+class EmployeePhone(db.Model):
+    __tablename__ = "employee_phone"
+
+    ssn = db.Column(db.String(11), db.ForeignKey("employee.ssn", ondelete="CASCADE"), primary_key=True)
+    phone = db.Column(db.String(20), primary_key=True)
+
+    employee = db.relationship("Employee", back_populates="phones")
 
 
 # =========================
@@ -69,7 +79,7 @@ class Employee(db.Model):
 class EmployeeDependent(db.Model):
     __tablename__ = "employee_dependent"
 
-    emp_ssn = db.Column(db.String(11), db.ForeignKey("employee.ssn", ondelete="CASCADE"), primary_key=True)
+    employee_ssn = db.Column(db.String(11), db.ForeignKey("employee.ssn", ondelete="CASCADE"), primary_key=True)
     dependent_name = db.Column(db.String(100), primary_key=True)
 
     employee = db.relationship("Employee", back_populates="dependents")
@@ -92,12 +102,10 @@ class Customer(db.Model):
 
     branch_id = db.Column(db.Integer, db.ForeignKey("branch.branch_id"), nullable=False)
     personal_banker_ssn = db.Column(db.String(11), db.ForeignKey("employee.ssn", ondelete="SET NULL"), nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     branch = db.relationship("Branch", back_populates="customers")
     personal_banker = db.relationship("Employee", back_populates="customers")
     account_links = db.relationship("CustomerAccount", back_populates="customer", cascade="all, delete")
-    user = db.relationship("User", back_populates="customer")
 
 
 # =========================
@@ -111,7 +119,7 @@ class Account(db.Model):
     account_type = db.Column(db.String(50), nullable=False)
 
     customer_links = db.relationship("CustomerAccount", back_populates="account", cascade="all, delete")
-    transactions = db.relationship("BankTransaction", back_populates="account", cascade="all, delete")
+    transactions = db.relationship("Transaction", back_populates="account", cascade="all, delete")
 
     savings_detail = db.relationship("SavingsAccount", uselist=False, back_populates="account", cascade="all, delete")
     checking_detail = db.relationship("CheckingAccount", uselist=False, back_populates="account", cascade="all, delete")
@@ -120,7 +128,7 @@ class Account(db.Model):
 
 
 # =========================
-# SUBTYPES
+# ACCOUNT SUBTYPES (ISA)
 # =========================
 class SavingsAccount(db.Model):
     __tablename__ = "savings_account"
@@ -146,7 +154,7 @@ class MoneyMarketAccount(db.Model):
 class LoanAccount(db.Model):
     __tablename__ = "loan_account"
     account_number = db.Column(db.Integer, db.ForeignKey("account.account_number", ondelete="CASCADE"), primary_key=True)
-    interest_rate = db.Column(db.Numeric(5, 2), nullable=False)
+    fixed_interest_rate = db.Column(db.Numeric(5, 2), nullable=False)
     monthly_payment = db.Column(db.Numeric(15, 2))
     branch_id = db.Column(db.Integer, db.ForeignKey("branch.branch_id"))
     account = db.relationship("Account", back_populates="loan_detail")
@@ -154,13 +162,13 @@ class LoanAccount(db.Model):
 
 
 # =========================
-# CUSTOMER_ACCOUNT (Holds)
+# CUSTOMER_ACCOUNT (Holds — M:N between Customer and Account)
 # =========================
 class CustomerAccount(db.Model):
     __tablename__ = "customer_account"
     customer_ssn = db.Column(db.String(11), db.ForeignKey("customer.ssn", ondelete="CASCADE"), primary_key=True)
     account_number = db.Column(db.Integer, db.ForeignKey("account.account_number", ondelete="CASCADE"), primary_key=True)
-    last_accessed_date = db.Column(db.Date)
+    last_access_date = db.Column(db.Date)
     customer = db.relationship("Customer", back_populates="account_links")
     account = db.relationship("Account", back_populates="customer_links")
 
@@ -173,20 +181,20 @@ class TransactionType(db.Model):
     code = db.Column(db.String(10), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     is_chargeable = db.Column(db.Boolean, nullable=False)
-    transactions = db.relationship("BankTransaction", back_populates="transaction_type", cascade="all, delete")
+    transactions = db.relationship("Transaction", back_populates="transaction_type", cascade="all, delete")
 
 
 # =========================
-# BANK TRANSACTION
+# TRANSACTION
 # =========================
-class BankTransaction(db.Model):
-    __tablename__ = "bank_transaction"
+class Transaction(db.Model):
+    __tablename__ = "transaction"
 
     transaction_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     code = db.Column(db.String(10), db.ForeignKey("transaction_type.code", ondelete="CASCADE"), nullable=False)
     account_number = db.Column(db.Integer, db.ForeignKey("account.account_number", ondelete="CASCADE"), nullable=False)
-    transaction_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
-    transaction_hour = db.Column(db.Integer, nullable=False, default=0)
+    date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
+    hour = db.Column(db.Integer, nullable=False, default=0)
     amount = db.Column(db.Numeric(15, 2), nullable=False)
 
     transaction_type = db.relationship("TransactionType", back_populates="transactions")
